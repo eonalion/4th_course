@@ -6,30 +6,22 @@ import java.nio.file.{Files, Paths}
 import scala.io.Source
 
 object CaesarCipher {
-  val CAESAR_INPUT_PATH = "input_caesar.txt"
-  val CAESAR_OUTPUT_PATH = "out"
-  val CAESAR_OUTPUT_FILE = "output_caesar.txt"
-  val FREQUENCIES_PATH_RU = "frequencies_ru.txt"
-  val FREQUENCIES_PATH_EN = "frequencies_en.txt"
-
-  val BOUNDARIES_RU = ('Я', 33)
-  val BOUNDARIES_EN = ('Z', 26)
-  var boundaries = BOUNDARIES_EN
+  var boundaries = EncoderUtils.BOUNDARIES_EN
 
   def main(args: Array[String]): Unit = {
-    val language = args(1)
-    val shift = args(2).toInt
-    setBoundaries(language)
+    val language = args(0)
+    val shift = args(1).toInt
+    boundaries = EncoderUtils.setBoundaries(language)
 
-    val message = Source.fromResource(CAESAR_INPUT_PATH).getLines().mkString.toUpperCase
+    val message = Source.fromResource(EncoderUtils.CAESAR_INPUT_PATH).getLines().mkString.toUpperCase
     val encodedMessage = encode(message.toUpperCase, shift)
     val decodedMessage = decode(encodedMessage, getFrequencies)
 
-    if (!Files.exists(Paths.get(CAESAR_OUTPUT_PATH))) {
-      Files.createDirectory(Paths.get(CAESAR_OUTPUT_PATH))
+    if (!Files.exists(Paths.get(EncoderUtils.OUTPUT_PATH))) {
+      Files.createDirectory(Paths.get(EncoderUtils.OUTPUT_PATH))
     }
 
-    val bw = new BufferedWriter(new FileWriter(Paths.get(CAESAR_OUTPUT_PATH, CAESAR_OUTPUT_FILE).toFile))
+    val bw = new BufferedWriter(new FileWriter(Paths.get(EncoderUtils.OUTPUT_PATH, EncoderUtils.CAESAR_OUTPUT_FILE).toFile))
     bw.write(decodedMessage)
     bw.close()
   }
@@ -51,7 +43,7 @@ object CaesarCipher {
     val actualFrequencies = encodedMessage
       .filter(p => p.isLetter)
       .groupBy(c => c)
-      .map(e => e._1 -> scale(e._2.length.toDouble / letterAmount.toDouble))
+      .map(e => e._1 -> EncoderUtils.scale(e._2.length.toDouble / letterAmount.toDouble))
 
     encodedMessage.map(c =>
       if (c.isLetter)
@@ -59,18 +51,6 @@ object CaesarCipher {
       else
         c
     )
-  }
-
-  def setBoundaries(language: String): Unit = {
-    if (language.equalsIgnoreCase("RU")) {
-      boundaries = BOUNDARIES_RU
-    } else {
-      boundaries = BOUNDARIES_EN
-    }
-  }
-
-  def scale(value: Double): Double = {
-    BigDecimal(value).setScale(5, BigDecimal.RoundingMode.HALF_UP).toDouble
   }
 
   def countLetters(text: String): Int = {
@@ -96,10 +76,10 @@ object CaesarCipher {
   def getFrequencies: Seq[(Char, Double)] = {
     var frequenciesFilePath = ""
 
-    if (boundaries.equals(BOUNDARIES_RU)) {
-      frequenciesFilePath = FREQUENCIES_PATH_RU
+    if (boundaries.equals(EncoderUtils.BOUNDARIES_RU)) {
+      frequenciesFilePath = EncoderUtils.FREQUENCIES_PATH_RU
     } else {
-      frequenciesFilePath = FREQUENCIES_PATH_EN
+      frequenciesFilePath = EncoderUtils.FREQUENCIES_PATH_EN
     }
 
     Source.fromResource(frequenciesFilePath)

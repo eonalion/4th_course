@@ -6,31 +6,27 @@ import java.nio.file.{Files, Paths}
 import scala.io.Source
 
 object VigenereCipher {
-  val CAESAR_INPUT_PATH = "input_vigenere.txt"
-  val CAESAR_OUTPUT_PATH = "out"
-  val CAESAR_OUTPUT_FILE = "output_vigenere.txt"
-  val FREQUENCIES_PATH_RU = "frequencies_ru.txt"
-  val FREQUENCIES_PATH_EN = "frequencies_en.txt"
 
-  val BOUNDARIES_RU = ('Я', 33, 1040)
-  val BOUNDARIES_EN = ('Z', 26, 65)
-  var boundaries = BOUNDARIES_EN
+  var boundaries = EncoderUtils.BOUNDARIES_EN
 
   def main(args: Array[String]): Unit = {
     val language = args(0)
     val key = args(1).toUpperCase()
-    setBoundaries(language)
+    boundaries = EncoderUtils.setBoundaries(language)
 
-    val message = Source.fromResource(CAESAR_INPUT_PATH).getLines().mkString.toUpperCase
+    val message = Source.fromResource(EncoderUtils.VIGENERE_INPUT_PATH).getLines().mkString.toUpperCase
     val encodedMessage = encode(message.toUpperCase, key)
-  }
+    val decodedKey = decode(encodedMessage)
 
-  def setBoundaries(language: String): Unit = {
-    if (language.equalsIgnoreCase("RU")) {
-      boundaries = BOUNDARIES_RU
-    } else {
-      boundaries = BOUNDARIES_EN
+    println(decodedKey)
+
+    if (!Files.exists(Paths.get(EncoderUtils.OUTPUT_PATH))) {
+      Files.createDirectory(Paths.get(EncoderUtils.OUTPUT_PATH))
     }
+
+    val bw = new BufferedWriter(new FileWriter(Paths.get(EncoderUtils.OUTPUT_PATH, EncoderUtils.VIGENERE_ENCODED_OUTPUT_FILE).toFile))
+    bw.write(encodedMessage)
+    bw.close()
   }
 
   def encode(text: String, key: String): String = {
@@ -57,5 +53,74 @@ object VigenereCipher {
     })
   }
 
-  def decode(encodedMessage: String, frequencies: Seq[(Char, Double)]): String = ???
+  def decode(encodedMessage: String): String = {
+    val destinations = findDestinationsBetweenRepeatedSubsequences(encodedMessage)
+    val filteredDestinations = filterDestinations(destinations)
+    val keyLength = calculateGCD(filteredDestinations)
+
+    val encodedStringsArray = Array.fill(keyLength)("")
+    val decodedStringsArray = Array.fill(keyLength)("")
+    var key = ""
+
+    for (i <- 0 until encodedMessage.length) {
+      val index = i % keyLength
+      encodedStringsArray(index) += encodedMessage.charAt(i)
+    }
+
+    CaesarCipher.boundaries = EncoderUtils.setBoundaries("en")
+    for (i <- 0 until keyLength) {
+      decodedStringsArray(i) = CaesarCipher.decode(encodedStringsArray(i), CaesarCipher.getFrequencies)
+      //TODO: Fix (if first is not letter)
+      val keyChar = (boundaries._3 + Math.abs(encodedMessage.charAt(i) - decodedStringsArray(i).charAt(0))).toChar
+      key += keyChar
+    }
+
+    key
+  }
+
+  def findDestinationsBetweenRepeatedSubsequences(text: String): collection.mutable.Map[Int, Int] = {
+    val pattern = """(?=([a-zA-Z]{3}).*\1+)""".r
+    var subsequences = Set[String]()
+    val destinationsMap = collection.mutable.Map[Int, Int]().withDefaultValue(0)
+
+    pattern.findAllIn(text).matchData foreach {
+      m => subsequences += m.group(1)
+    }
+
+    subsequences.foreach(p => {
+      var oldIndex = text.indexOf(p)
+      while (oldIndex >= 0) {
+        val newIndex = text.indexOf(p, oldIndex + p.length)
+        if (newIndex >= 0) {
+          val currentIndex = newIndex - oldIndex
+          destinationsMap(currentIndex) += 1
+        }
+        oldIndex = newIndex
+      }
+    })
+
+    destinationsMap
+  }
+
+  def filterDestinations(destinations: collection.mutable.Map[Int, Int]): Seq[Int] = {
+    destinations.filter(p => p._2 > 1).keys.toSeq
+  }
+
+  def calculateGCD(destination: Seq[Int]): Int = {
+    var result = destination.head
+    for (i <- destination.indices) {
+      result = gcd(result, destination(i))
+
+      // Filter gdc with assumption that key length > 2
+      /* if (tempGDC > 2) {
+         result = tempGDC
+       }*/
+    }
+    result
+  }
+
+  def gcd(a: Int, b: Int): Int = {
+    if (b == 0) a else gcd(b, a % b)
+  }
+
 }

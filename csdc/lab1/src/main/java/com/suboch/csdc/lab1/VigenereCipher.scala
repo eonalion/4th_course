@@ -1,32 +1,20 @@
 package com.suboch.csdc.lab1
 
-import java.io.{BufferedWriter, FileWriter}
-import java.nio.file.{Files, Paths}
+import java.nio.file.Paths
 
 import scala.io.Source
 
 object VigenereCipher {
-
-  var boundaries = EncoderUtils.BOUNDARIES_EN
+  val KEY = "DOCUMENT"
 
   def main(args: Array[String]): Unit = {
-    val language = args(0)
-    val key = args(1).toUpperCase()
-    boundaries = EncoderUtils.setBoundaries(language)
-
     val message = Source.fromResource(EncoderUtils.VIGENERE_INPUT_PATH).getLines().mkString.toUpperCase
-    val encodedMessage = encode(message.toUpperCase, key)
-    val decodedKey = decode(encodedMessage)
+    val encodedMessage = encode(message.toUpperCase, KEY)
 
+    val decodedKey = decode(encodedMessage)
     println(decodedKey)
 
-    if (!Files.exists(Paths.get(EncoderUtils.OUTPUT_PATH))) {
-      Files.createDirectory(Paths.get(EncoderUtils.OUTPUT_PATH))
-    }
-
-    val bw = new BufferedWriter(new FileWriter(Paths.get(EncoderUtils.OUTPUT_PATH, EncoderUtils.VIGENERE_ENCODED_OUTPUT_FILE).toFile))
-    bw.write(encodedMessage)
-    bw.close()
+    EncoderUtils.writeToFile(encodedMessage, Paths.get(EncoderUtils.OUTPUT_PATH, EncoderUtils.VIGENERE_ENCODED_OUTPUT_FILE).toFile)
   }
 
   def encode(text: String, key: String): String = {
@@ -35,17 +23,19 @@ object VigenereCipher {
     var res = ' '
 
     text.map(symbol => {
-      keyPosition = textPosition % key.length
+      keyPosition = keyPosition % key.length
 
       if (!symbol.isLetter)
         res = symbol
       else {
         val keyChar = key.charAt(keyPosition)
         val textChar = text.charAt(textPosition)
-        res = keyChar + (textChar - boundaries._3) toChar
+        res = keyChar + (textChar - EncoderUtils.BOUNDARIES_EN._3) toChar
 
-        if (res > boundaries._1)
-          res = boundaries._3 + (res - boundaries._1 - 1) toChar
+        if (res > EncoderUtils.BOUNDARIES_EN._1)
+          res = EncoderUtils.BOUNDARIES_EN._3 + (res - EncoderUtils.BOUNDARIES_EN._1 - 1) toChar
+
+        keyPosition += 1
       }
 
       textPosition += 1
@@ -54,7 +44,9 @@ object VigenereCipher {
   }
 
   def decode(encodedMessage: String): String = {
-    val destinations = findDestinationsBetweenRepeatedSubsequences(encodedMessage)
+    val filteredText = encodedMessage.filter(p => p.isLetter)
+    println(filteredText.length)
+    val destinations = findDestinationsBetweenRepeatedSubsequences(filteredText)
     val filteredDestinations = filterDestinations(destinations)
     val keyLength = calculateGCD(filteredDestinations)
 
@@ -62,20 +54,37 @@ object VigenereCipher {
     val decodedStringsArray = Array.fill(keyLength)("")
     var key = ""
 
-    for (i <- 0 until encodedMessage.length) {
+    for (i <- 0 until filteredText.length) {
       val index = i % keyLength
-      encodedStringsArray(index) += encodedMessage.charAt(i)
+      encodedStringsArray(index) += filteredText.charAt(i)
     }
 
-    CaesarCipher.boundaries = EncoderUtils.setBoundaries("en")
     for (i <- 0 until keyLength) {
-      decodedStringsArray(i) = CaesarCipher.decode(encodedStringsArray(i), CaesarCipher.getFrequencies)
-      //TODO: Fix (if first is not letter)
-      val keyChar = (boundaries._3 + Math.abs(encodedMessage.charAt(i) - decodedStringsArray(i).charAt(0))).toChar
+      decodedStringsArray(i) = decodeCaesarCipher(encodedStringsArray(i))
+      val keyChar = (EncoderUtils.BOUNDARIES_EN._3 + Math.abs(filteredText.charAt(i) - decodedStringsArray(i).charAt(0))).toChar
       key += keyChar
     }
 
     key
+  }
+
+  def decodeCaesarCipher(text: String): String = {
+    val freqChar = findTheMostFrequentChar(text)
+    val shift = freqChar - 'E'
+
+    var decodedString = ""
+    for (i <- 0 until text.length) decodedString += text.charAt(i) - shift
+
+    CaesarCipher.encode(text, shift)
+  }
+
+  def findTheMostFrequentChar(text: String): Char = {
+    val actualFrequencies = text
+      .filter(p => p.isLetter)
+      .groupBy(c => c)
+      .map(e => e._1 -> e._2.length)
+
+    actualFrequencies.maxBy(_._2)._1
   }
 
   def findDestinationsBetweenRepeatedSubsequences(text: String): collection.mutable.Map[Int, Int] = {
@@ -83,17 +92,14 @@ object VigenereCipher {
     var subsequences = Set[String]()
     val destinationsMap = collection.mutable.Map[Int, Int]().withDefaultValue(0)
 
-    pattern.findAllIn(text).matchData foreach {
-      m => subsequences += m.group(1)
-    }
+    pattern.findAllIn(text).matchData.foreach { m => subsequences += m.group(1) }
 
     subsequences.foreach(p => {
       var oldIndex = text.indexOf(p)
       while (oldIndex >= 0) {
         val newIndex = text.indexOf(p, oldIndex + p.length)
         if (newIndex >= 0) {
-          val currentIndex = newIndex - oldIndex
-          destinationsMap(currentIndex) += 1
+          destinationsMap(newIndex - oldIndex) += 1
         }
         oldIndex = newIndex
       }
@@ -103,18 +109,18 @@ object VigenereCipher {
   }
 
   def filterDestinations(destinations: collection.mutable.Map[Int, Int]): Seq[Int] = {
-    destinations.filter(p => p._2 > 1).keys.toSeq
+    destinations.filter(p => p._2 > 3).keys.toSeq
   }
 
   def calculateGCD(destination: Seq[Int]): Int = {
     var result = destination.head
     for (i <- destination.indices) {
-      result = gcd(result, destination(i))
+      val tempGDC = gcd(result, destination(i))
 
       // Filter gdc with assumption that key length > 2
-      /* if (tempGDC > 2) {
-         result = tempGDC
-       }*/
+      if (tempGDC > 4) {
+        result = tempGDC
+      }
     }
     result
   }
